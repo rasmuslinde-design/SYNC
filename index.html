@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="et">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SYNC - Sotsiaalne Sünkroon</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Animated background particles -->
+    <div id="particles"></div>
+    <div id="floating-shapes">
+      <div class="shape shape-1"></div>
+      <div class="shape shape-2"></div>
+      <div class="shape shape-3"></div>
+      <div class="shape shape-4"></div>
+      <div class="shape shape-5"></div>
+    </div>
+
+    <div id="game-container">
+      <!-- LANGUAGE SCREEN -->
+      <div id="language-screen" class="screen active">
+        <div class="hero-section">
+          <div class="logo-container">
+            <h1 class="logo-text animate-float">SYNC</h1>
+            <div class="logo-underline"></div>
+          </div>
+          <p class="subtitle fade-in-up">VALI KEEL / SELECT LANGUAGE</p>
+        </div>
+        <div class="button-row stagger-in">
+          <button class="btn-primary btn-lg" onclick="selectLanguage('et')">
+            <span class="btn-icon">🇪🇪</span> EESTI KEEL
+          </button>
+          <button class="btn-primary btn-lg" onclick="selectLanguage('en')">
+            <span class="btn-icon">🇬🇧</span> ENGLISH
+          </button>
+        </div>
+      </div>
+
+      <!-- ROLE SCREEN -->
+      <div id="role-screen" class="screen">
+        <div class="hero-section">
+          <h1 class="logo-text animate-float">SYNC</h1>
+          <div class="logo-underline"></div>
+        </div>
+        <div class="form-area fade-in-up">
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input type="text" id="player-name" placeholder="SINU NIMI" maxlength="12" />
+          </div>
+        </div>
+        <div class="action-grid stagger-in">
+          <button class="btn-accent btn-host" onclick="setupHost()">
+            <span class="btn-icon">🎮</span> HOSTI MÄNGU
+          </button>
+          <button class="btn-accent btn-join" onclick="setupJoin()">
+            <span class="btn-icon">🔗</span> LIITU MÄNGUGA
+          </button>
+        </div>
+        <div class="secondary-actions">
+          <button class="btn-ghost" onclick="toggleRules(true)">📖 MÄNGUREEGLID</button>
+          <button class="btn-ghost btn-dim" onclick="showScreen('language-screen')">← TAGASI</button>
+        </div>
+      </div>
+
+      <!-- RULES MODAL -->
+      <div id="rules-modal" class="modal">
+        <div class="modal-content glass-card">
+          <div class="modal-header">
+            <span class="modal-icon">📖</span>
+            <h2>KUIDAS MÄNGIDA?</h2>
+          </div>
+          <div id="rules-text" class="rules-body"></div>
+          <button class="btn-primary" onclick="toggleRules(false)">SULGE</button>
+        </div>
+      </div>
+
+      <!-- JOIN INPUT SCREEN -->
+      <div id="join-input-screen" class="screen">
+        <div class="hero-section">
+          <span class="screen-icon bounce-in">🔑</span>
+          <h1 class="screen-title">LIITU</h1>
+        </div>
+        <div class="form-area fade-in-up">
+          <div class="input-wrapper">
+            <span class="input-icon">🔢</span>
+            <input type="text" id="join-room-code" placeholder="RUUMI KOOD" maxlength="4" />
+          </div>
+        </div>
+        <div class="action-grid">
+          <button class="btn-accent btn-join" onclick="joinRoom()">SISENE →</button>
+        </div>
+        <div class="secondary-actions">
+          <button class="btn-ghost btn-dim" onclick="showScreen('role-screen')">← TAGASI</button>
+        </div>
+      </div>
+
+      <!-- HOST LOBBY SCREEN -->
+      <div id="host-lobby-screen" class="screen">
+        <div class="hero-section">
+          <span class="screen-icon bounce-in">🏠</span>
+          <h1 class="screen-title">RUUM</h1>
+          <div class="room-code-display" id="display-room-code">----</div>
+          <p class="lobby-hint" id="lobby-status">Ootame mängijaid...</p>
+        </div>
+        <div id="lobby-list" class="lobby-grid"></div>
+        <div class="action-grid">
+          <button class="btn-start pulse-glow" id="start-game-btn" onclick="broadcastStart()">
+            ▶ ALUSTA MÄNGU
+          </button>
+          <p id="wait-message" class="wait-msg" style="display:none">
+            ⏳ Oota, kuni HOST alustab...
+          </p>
+        </div>
+        <div class="secondary-actions">
+          <button class="btn-ghost btn-dim" onclick="leaveRoom()">🚪 LAHKU</button>
+        </div>
+      </div>
+
+      <!-- QUESTION SCREEN -->
+      <div id="question-screen" class="screen">
+        <div class="question-header">
+          <div id="progress-container"><div id="progress-bar"></div></div>
+          <div class="question-meta">
+            <span id="question-number" class="q-number">KÜSIMUS 1 / 10</span>
+            <div class="timer-circle" id="timer-circle-container">
+              <svg class="timer-svg" viewBox="0 0 100 100">
+                <circle class="timer-track" cx="50" cy="50" r="45"/>
+                <circle class="timer-fill" id="timer-circle" cx="50" cy="50" r="45"/>
+              </svg>
+              <span id="question-timer" class="timer-number">20</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="question-body slide-in">
+          <div class="question-icon-large" id="question-icon">🧠</div>
+          <h2 id="question-text" class="question-label">Küsimus</h2>
+        </div>
+
+        <!-- Hidden elements for timer bar compatibility -->
+        <div id="question-timer-bar-container" style="display:none"><div id="question-timer-bar"></div></div>
+
+        <div class="answer-cards">
+          <div class="answer-card answer-left" onclick="handleAnswer(-2)">
+            <div class="answer-accent-bar"></div>
+            <p id="answer-left" class="answer-text"></p>
+          </div>
+          <div class="answer-vs">VS</div>
+          <div class="answer-card answer-right" onclick="handleAnswer(2)">
+            <div class="answer-accent-bar"></div>
+            <p id="answer-right" class="answer-text"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULT SCREEN -->
+      <div id="result-screen" class="screen">
+        <div id="loading-spinner" class="spinner-container">
+          <div class="orbit-spinner">
+            <div class="orbit"></div>
+            <div class="orbit"></div>
+            <div class="orbit"></div>
+          </div>
+          <p id="loading-text" class="loading-label">OOTAME TEISI MÄNGIJAID...</p>
+          <p id="loading-count" class="loading-count"></p>
+        </div>
+
+        <div id="results-content" style="display: none; width: 100%">
+          <div class="results-header">
+            <span class="screen-icon bounce-in">🏆</span>
+            <h1 class="screen-title">EDETABEL</h1>
+          </div>
+
+          <ul id="leaderboard-list" class="leaderboard"></ul>
+
+          <div class="pairs-section">
+            <h3 class="section-label">VALI VÄLJAKUTSE</h3>
+            <div class="pair-grid">
+              <div class="pair-card sync-card glass-card" onclick="showChallenge('sync')">
+                <span class="pair-emoji">🔗</span>
+                <div class="pair-label">SARNANE PAAR</div>
+                <div id="sync-names" class="pair-names">...</div>
+              </div>
+              <div class="pair-card bridge-card glass-card" onclick="showChallenge('bridge')">
+                <span class="pair-emoji">🌉</span>
+                <div class="pair-label">VASTANDPAAR</div>
+                <div id="bridge-names" class="pair-names">...</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-ghost btn-dim" onclick="location.reload()">🏠 PEAMENÜÜSSE</button>
+        </div>
+      </div>
+
+      <!-- CHALLENGE SCREEN -->
+      <div id="challenge-screen" class="screen">
+        <div class="hero-section">
+          <span class="screen-icon bounce-in">⚡</span>
+          <h1 class="screen-title" id="challenge-title">ÜLESANNE</h1>
+        </div>
+        <div class="challenge-card glass-card fade-in-up">
+          <div id="challenge-desc" class="challenge-body"></div>
+        </div>
+        <div id="timer" class="challenge-timer">01:30</div>
+        <button class="btn-ghost" onclick="backToLeaderboard()">← TAGASI</button>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

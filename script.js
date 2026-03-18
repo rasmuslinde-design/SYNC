@@ -1,0 +1,302 @@
+// ========== SOCKET.IO KLIENT ==========
+let socket;
+let gameQuestions = [];
+let gameChallenges = {};
+
+let state = {
+  lang: "et",
+  name: "",
+  room: "",
+  isHost: false,
+  score: 0,
+  qIdx: 0,
+  questionTimer: null,
+  questionTimeLeft: 20,
+};
+
+function connectSocket() {
+  if (socket && socket.connected) return;
+  socket = io();
+
+  socket.on("room-created", ({ code, questions, challenges }) => {
+    state.room = code;
+    gameQuestions = questions;
+    gameChallenges = challenges;
+    document.getElementById("display-room-code").innerText = code;
+    document.getElementById("start-game-btn").style.display = "flex";
+    document.getElementById("wait-message").style.display = "none";
+    showScreen("host-lobby-screen");
+  });
+
+  socket.on("room-joined", ({ code, questions, challenges }) => {
+    state.room = code;
+    gameQuestions = questions;
+    gameChallenges = challenges;
+    document.getElementById("display-room-code").innerText = code;
+    document.getElementById("start-game-btn").style.display = "none";
+    document.getElementById("wait-message").style.display = "block";
+    showScreen("host-lobby-screen");
+  });
+
+  socket.on("join-error", (msg) => {
+    alert(msg);
+  });
+
+  socket.on("lobby-update", (playerNames) => {
+    document.getElementById("lobby-list").innerHTML = playerNames
+      .map((n) => `<div class="lobby-item">${n}</div>`)
+      .join("");
+  });
+
+  socket.on("game-started", () => {
+    startQuestions();
+  });
+
+  socket.on("score-progress", ({ finished, total }) => {
+    const loadingText = document.getElementById("loading-text");
+    const loadingCount = document.getElementById("loading-count");
+
+    if (state.lang === "et") {
+      loadingText.innerText = "OOTAME TEISI MÄNGIJAID...";
+      loadingCount.innerText = `${finished} / ${total} VASTANUD`;
+    } else {
+      loadingText.innerText = "WAITING FOR OTHER PLAYERS...";
+      loadingCount.innerText = `${finished} / ${total} ANSWERED`;
+    }
+  });
+
+  socket.on(
+    "all-finished",
+    ({ leaderboard, syncPair, bridgePair, challenges }) => {
+      gameChallenges = challenges;
+      document.getElementById("loading-spinner").style.display = "none";
+      document.getElementById("results-content").style.display = "block";
+      showLeaderboardData(leaderboard, syncPair, bridgePair);
+    },
+  );
+
+  socket.on("player-left", (name) => {
+    console.log(name + " lahkus ruumist.");
+  });
+}
+
+// ========== EKRAANIDE HALDAMINE ==========
+
+function showScreen(id) {
+  document
+    .querySelectorAll(".screen")
+    .forEach((s) => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function selectLanguage(l) {
+  state.lang = l;
+  showScreen("role-screen");
+}
+
+function toggleRules(show) {
+  const modal = document.getElementById("rules-modal");
+  if (show) {
+    const rulesText = {
+      et: "1. Host loob ruumi ja mängijad liituvad koodiga (max 8 in).\n2. Kõik vastavad 10-le isiksuse küsimusele (20 sek küsimus).\n3. Süsteem arvutab Sinu sotsiaalse koodi (-20 kuni +20).\n4. Edetabelis näed kahte paari: SARNASED ja VASTANDID.\n5. Valitud paar peab täitma 90-sekundilise väljakutse.",
+      en: "1. Host creates a room, players join with a code (max 8).\n2. Everyone answers 10 personality questions (20 sec each).\n3. System calculates your Social Code (-20 to +20).\n4. The leaderboard shows two pairs: SYNC and BRIDGE.\n5. The selected pair must complete a 90-second challenge.",
+    };
+    document.getElementById("rules-text").innerText = rulesText[state.lang];
+    modal.style.display = "flex";
+  } else {
+    modal.style.display = "none";
+  }
+}
+
+// ========== HOST & JOIN ==========
+
+function setupHost() {
+  state.name = document.getElementById("player-name").value.trim() || "Host";
+  state.isHost = true;
+  connectSocket();
+  socket.emit("create-room", { name: state.name, lang: state.lang });
+}
+
+function setupJoin() {
+  state.name = document.getElementById("player-name").value.trim() || "Mängija";
+  connectSocket();
+  showScreen("join-input-screen");
+}
+
+function joinRoom() {
+  const code = document.getElementById("join-room-code").value.trim();
+  if (!code) return alert("Sisesta kood!");
+  state.room = code;
+  state.isHost = false;
+  socket.emit("join-room", { code, name: state.name });
+}
+
+function broadcastStart() {
+  socket.emit("start-game");
+}
+
+// ========== KÜSIMUSED ==========
+
+function startQuestions() {
+  state.qIdx = 0;
+  state.score = 0;
+  showScreen("question-screen");
+  updateQ();
+}
+
+function updateQ() {
+  const qCount = gameQuestions.length;
+  const qData = gameQuestions[state.qIdx];
+
+  const numText =
+    state.lang === "et"
+      ? `KÜSIMUS ${state.qIdx + 1} / ${qCount}`
+      : `QUESTION ${state.qIdx + 1} / ${qCount}`;
+  document.getElementById("question-number").innerText = numText;
+  document.getElementById("question-text").innerText = qData.q;
+  document.getElementById("answer-left").innerText = qData.a1;
+  document.getElementById("answer-right").innerText = qData.a2;
+
+  // Küsimuse ikoon
+  const iconEl = document.getElementById("question-icon");
+  if (iconEl && qData.icon) {
+    iconEl.innerText = qData.icon;
+    iconEl.style.animation = "none";
+    iconEl.offsetHeight; // reflow
+    iconEl.style.animation =
+      "icon-float 3s ease-in-out infinite, bounce-in 0.5s ease-out";
+  }
+
+  // Progress bar
+  document.getElementById("progress-bar").style.width =
+    (state.qIdx / qCount) * 100 + "%";
+
+  // Animate question body
+  const qBody = document.querySelector(".question-body");
+  if (qBody) {
+    qBody.style.animation = "none";
+    qBody.offsetHeight;
+    qBody.style.animation = "slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1)";
+  }
+
+  // Küsimuse taimer (20 sekundit)
+  startQuestionTimer();
+}
+
+function startQuestionTimer() {
+  if (state.questionTimer) clearInterval(state.questionTimer);
+  state.questionTimeLeft = 20;
+  const timerEl = document.getElementById("question-timer");
+  const timerCircle = document.getElementById("timer-circle");
+  const circumference = 2 * Math.PI * 45; // r=45
+
+  timerEl.innerText = state.questionTimeLeft;
+  timerEl.classList.remove("timer-warning", "timer-danger");
+
+  if (timerCircle) {
+    timerCircle.style.strokeDashoffset = "0";
+    timerCircle.classList.remove("timer-warning", "timer-danger");
+  }
+
+  state.questionTimer = setInterval(() => {
+    state.questionTimeLeft--;
+    timerEl.innerText = state.questionTimeLeft;
+
+    // Update circular timer
+    if (timerCircle) {
+      const offset = circumference * (1 - state.questionTimeLeft / 20);
+      timerCircle.style.strokeDashoffset = offset;
+    }
+
+    if (state.questionTimeLeft <= 5) {
+      timerEl.classList.add("timer-danger");
+      if (timerCircle) timerCircle.classList.add("timer-danger");
+    } else if (state.questionTimeLeft <= 10) {
+      timerEl.classList.add("timer-warning");
+      if (timerCircle) timerCircle.classList.add("timer-warning");
+    }
+
+    if (state.questionTimeLeft <= 0) {
+      clearInterval(state.questionTimer);
+      handleAnswer(0);
+    }
+  }, 1000);
+}
+
+function handleAnswer(p) {
+  if (state.questionTimer) clearInterval(state.questionTimer);
+  state.score += p;
+  state.qIdx++;
+  if (state.qIdx < gameQuestions.length) {
+    updateQ();
+  } else {
+    document.getElementById("progress-bar").style.width = "100%";
+    finishGame();
+  }
+}
+
+// ========== TULEMUSED ==========
+
+function finishGame() {
+  socket.emit("submit-score", { score: state.score });
+
+  showScreen("result-screen");
+  document.getElementById("loading-spinner").style.display = "flex";
+  document.getElementById("results-content").style.display = "none";
+}
+
+function showLeaderboardData(leaderboard, syncPair, bridgePair) {
+  document.getElementById("leaderboard-list").innerHTML = leaderboard
+    .map(
+      (p, i) => `
+        <li style="${p.name === state.name ? "border-left: 4px solid var(--blue); background: var(--blue-soft);" : ""} animation-delay: ${i * 0.1}s">
+            <span>${p.name}</span>
+            <span style="color:var(--purple); font-weight: 900;">${p.score > 0 ? "+" + p.score : p.score}</span>
+        </li>`,
+    )
+    .join("");
+
+  if (syncPair) {
+    document.getElementById("sync-names").innerText =
+      syncPair.a + " & " + syncPair.b;
+    document.getElementById("bridge-names").innerText =
+      bridgePair.a + " & " + bridgePair.b;
+  } else {
+    const waitText = state.lang === "et" ? "Ootame..." : "Waiting...";
+    document.getElementById("sync-names").innerText = waitText;
+    document.getElementById("bridge-names").innerText = waitText;
+  }
+}
+
+// ========== ÜLESANDED ==========
+
+let timerInterval;
+function showChallenge(type) {
+  showScreen("challenge-screen");
+  const prefix = state.lang === "et" ? "TEIE ÜLESANNE: " : "YOUR TASK: ";
+  document.getElementById("challenge-desc").innerText =
+    prefix + gameChallenges[type];
+  startTimer(90);
+}
+
+function startTimer(sec) {
+  if (timerInterval) clearInterval(timerInterval);
+  let t = sec;
+  timerInterval = setInterval(() => {
+    let m = Math.floor(t / 60),
+      s = t % 60;
+    document.getElementById("timer").innerText =
+      `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    if (t-- <= 0) clearInterval(timerInterval);
+  }, 1000);
+}
+
+function backToLeaderboard() {
+  if (timerInterval) clearInterval(timerInterval);
+  showScreen("result-screen");
+}
+
+function leaveRoom() {
+  if (socket) socket.disconnect();
+  showScreen("role-screen");
+}
