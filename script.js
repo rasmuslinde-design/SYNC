@@ -203,8 +203,8 @@ function toggleRules(show) {
   const modal = document.getElementById("rules-modal");
   if (show) {
     const rulesText = {
-      et: "1. Host loob ruumi ja mängijad liituvad koodiga (max 8 in).\n2. Kõik vastavad 10-le isiksuse küsimusele (20 sek küsimus).\n3. Süsteem arvutab Sinu sotsiaalse koodi (-20 kuni +20).\n4. Edetabelis näed kahte paari: SARNASED ja VASTANDID.\n5. Valitud paar peab täitma 90-sekundilise väljakutse.",
-      en: "1. Host creates a room, players join with a code (max 8).\n2. Everyone answers 10 personality questions (20 sec each).\n3. System calculates your Social Code (-20 to +20).\n4. The leaderboard shows two pairs: SYNC and BRIDGE.\n5. The selected pair must complete a 90-second challenge.",
+      et: "1. Host loob ruumi ja mängijad liituvad koodiga (max 8 in).\n2. Kõik vastavad 10-le isiksuse küsimusele (20 sek küsimus).\n3. Süsteem arvutab sinu skaala (-10 kuni +10).\n4. Edetabelis näed kahte paari: SARNASED ja VASTANDID.\n5. Valitud paar peab täitma 90-sekundilise väljakutse.",
+      en: "1. Host creates a room, players join with a code (max 8).\n2. Everyone answers 10 personality questions (20 sec each).\n3. The system calculates your scale (-10 to +10).\n4. The leaderboard shows two pairs: SYNC and BRIDGE.\n5. The selected pair must complete a 90-second challenge.",
     };
     document.getElementById("rules-text").innerText = rulesText[state.lang];
     modal.style.display = "flex";
@@ -350,13 +350,45 @@ function finishGame() {
   document.getElementById("results-content").style.display = "none";
 }
 
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+// Returns an HSL color string.
+// -10 => red, 0 => neutral, +10 => green
+function scoreToColor(score) {
+  const s = clamp(Number(score) || 0, -10, 10);
+
+  // Hue: red(0) -> green(120)
+  const hue = ((s + 10) / 20) * 120;
+
+  // Saturation: stronger at extremes, softer near 0
+  const abs = Math.abs(s);
+  const sat = 25 + (abs / 10) * 55; // 25%..80%
+
+  // Lightness: keep readable; slightly darker near extremes
+  const light = 62 - (abs / 10) * 10; // 62%..52%
+
+  return `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% ${light.toFixed(0)}%)`;
+}
+
 function showLeaderboardData(leaderboard, syncPair, bridgePair) {
+  const legend = document.getElementById("score-legend");
+  if (legend) {
+    const leftColor = scoreToColor(-10);
+    const rightColor = scoreToColor(10);
+    legend.innerHTML =
+      state.lang === "et"
+        ? `<span class="left" style="color:${leftColor}">-10 väga introvertne</span><span class="mid">SKAALA</span><span class="right" style="color:${rightColor}">+10 väga ekstravertne</span>`
+        : `<span class="left" style="color:${leftColor}">-10 very introverted</span><span class="mid">SCALE</span><span class="right" style="color:${rightColor}">+10 very extroverted</span>`;
+  }
+
   document.getElementById("leaderboard-list").innerHTML = leaderboard
     .map(
       (p, i) => `
         <li style="${p.name === state.name ? "border-left: 4px solid var(--blue); background: var(--blue-soft);" : ""} animation-delay: ${i * 0.1}s">
             <span>${p.name}</span>
-            <span style="color:var(--purple); font-weight: 900;">${p.score > 0 ? "+" + p.score : p.score}</span>
+            <span style="color: ${scoreToColor(p.score)}; font-weight: 900;">${p.score > 0 ? "+" + p.score : p.score}</span>
         </li>`,
     )
     .join("");
@@ -377,6 +409,7 @@ function showLeaderboardData(leaderboard, syncPair, bridgePair) {
 
 let timerInterval;
 function showChallenge(type) {
+  hideTimeUpOverlay();
   showScreen("challenge-screen");
   const prefix = state.lang === "et" ? "TEIE ÜLESANNE: " : "YOUR TASK: ";
   document.getElementById("challenge-desc").innerText =
@@ -392,12 +425,46 @@ function startTimer(sec) {
       s = t % 60;
     document.getElementById("timer").innerText =
       `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-    if (t-- <= 0) clearInterval(timerInterval);
+    if (t-- <= 0) {
+      clearInterval(timerInterval);
+      showTimeUpOverlay();
+    }
   }, 1000);
+}
+
+function showTimeUpOverlay() {
+  const overlay = document.getElementById("timeup-overlay");
+  if (!overlay) return;
+
+  const isET = state.lang === "et";
+  const title = document.getElementById("timeup-title");
+  const sub = document.getElementById("timeup-sub");
+  const backBtn = document.getElementById("timeup-back");
+
+  if (title) title.textContent = isET ? "AEG TÄIS!" : "TIME'S UP!";
+  if (sub)
+    sub.textContent = isET
+      ? "Tagasi tulemuste juurde."
+      : "Back to the results.";
+  if (backBtn)
+    backBtn.textContent = isET
+      ? "← TAGASI SKOORIDE JUURDE"
+      : "← BACK TO SCORES";
+
+  overlay.classList.add("active");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function hideTimeUpOverlay() {
+  const overlay = document.getElementById("timeup-overlay");
+  if (!overlay) return;
+  overlay.classList.remove("active");
+  overlay.setAttribute("aria-hidden", "true");
 }
 
 function backToLeaderboard() {
   if (timerInterval) clearInterval(timerInterval);
+  hideTimeUpOverlay();
   showScreen("result-screen");
 }
 

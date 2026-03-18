@@ -46,7 +46,12 @@
         <div class="form-area fade-in-up">
           <div class="input-wrapper">
             <span class="input-icon">👤</span>
-            <input type="text" id="player-name" placeholder="SINU NIMI" maxlength="12" />
+            <input
+              type="text"
+              id="player-name"
+              placeholder="SINU NIMI"
+              maxlength="12"
+            />
           </div>
         </div>
         <div class="action-grid stagger-in">
@@ -58,8 +63,15 @@
           </button>
         </div>
         <div class="secondary-actions">
-          <button class="btn-ghost" onclick="toggleRules(true)">📖 MÄNGUREEGLID</button>
-          <button class="btn-ghost btn-dim" onclick="showScreen('language-screen')">← TAGASI</button>
+          <button class="btn-ghost" onclick="toggleRules(true)">
+            📖 MÄNGUREEGLID
+          </button>
+          <button
+            class="btn-ghost btn-dim"
+            onclick="showScreen('language-screen')"
+          >
+            ← TAGASI
+          </button>
         </div>
       </div>
 
@@ -71,7 +83,9 @@
             <h2>KUIDAS MÄNGIDA?</h2>
           </div>
           <div id="rules-text" class="rules-body"></div>
-          <button class="btn-primary" onclick="toggleRules(false)">SULGE</button>
+          <button class="btn-primary" onclick="toggleRules(false)">
+            SULGE
+          </button>
         </div>
       </div>
 
@@ -84,14 +98,23 @@
         <div class="form-area fade-in-up">
           <div class="input-wrapper">
             <span class="input-icon">🔢</span>
-            <input type="text" id="join-room-code" placeholder="RUUMI KOOD" maxlength="4" />
+            <input
+              type="text"
+              id="join-room-code"
+              placeholder="RUUMI KOOD"
+              maxlength="4"
+            />
           </div>
         </div>
         <div class="action-grid">
-          <button class="btn-accent btn-join" onclick="joinRoom()">SISENE →</button>
+          <button class="btn-accent btn-join" onclick="joinRoom()">
+            SISENE →
+          </button>
         </div>
         <div class="secondary-actions">
-          <button class="btn-ghost btn-dim" onclick="showScreen('role-screen')">← TAGASI</button>
+          <button class="btn-ghost btn-dim" onclick="showScreen('role-screen')">
+            ← TAGASI
+          </button>
         </div>
       </div>
 
@@ -105,15 +128,21 @@
         </div>
         <div id="lobby-list" class="lobby-grid"></div>
         <div class="action-grid">
-          <button class="btn-start pulse-glow" id="start-game-btn" onclick="broadcastStart()">
+          <button
+            class="btn-start pulse-glow"
+            id="start-game-btn"
+            onclick="broadcastStart()"
+          >
             ▶ ALUSTA MÄNGU
           </button>
-          <p id="wait-message" class="wait-msg" style="display:none">
+          <p id="wait-message" class="wait-msg" style="display: none">
             ⏳ Oota, kuni HOST alustab...
           </p>
         </div>
         <div class="secondary-actions">
-          <button class="btn-ghost btn-dim" onclick="leaveRoom()">🚪 LAHKU</button>
+          <button class="btn-ghost btn-dim" onclick="leaveRoom()">
+            🚪 LAHKU
+          </button>
         </div>
       </div>
 
@@ -125,8 +154,14 @@
             <span id="question-number" class="q-number">KÜSIMUS 1 / 10</span>
             <div class="timer-circle" id="timer-circle-container">
               <svg class="timer-svg" viewBox="0 0 100 100">
-                <circle class="timer-track" cx="50" cy="50" r="45"/>
-                <circle class="timer-fill" id="timer-circle" cx="50" cy="50" r="45"/>
+                <circle class="timer-track" cx="50" cy="50" r="45" />
+                <circle
+                  class="timer-fill"
+                  id="timer-circle"
+                  cx="50"
+                  cy="50"
+                  r="45"
+                />
               </svg>
               <span id="question-timer" class="timer-number">20</span>
             </div>
@@ -139,15 +174,17 @@
         </div>
 
         <!-- Hidden elements for timer bar compatibility -->
-        <div id="question-timer-bar-container" style="display:none"><div id="question-timer-bar"></div></div>
+        <div id="question-timer-bar-container" style="display: none">
+          <div id="question-timer-bar"></div>
+        </div>
 
         <div class="answer-cards">
-          <div class="answer-card answer-left" onclick="handleAnswer(-2)">
+          <div class="answer-card answer-left" onclick="handleAnswer(-1)">
             <div class="answer-accent-bar"></div>
             <p id="answer-left" class="answer-text"></p>
           </div>
           <div class="answer-vs">VS</div>
-          <div class="answer-card answer-right" onclick="handleAnswer(2)">
+          <div class="answer-card answer-right" onclick="handleAnswer(1)">
             <div class="answer-accent-bar"></div>
             <p id="answer-right" class="answer-text"></p>
           </div>
@@ -162,7 +199,9 @@
             <div class="orbit"></div>
             <div class="orbit"></div>
           </div>
-          <p id="loading-text" class="loading-label">OOTAME TEISI MÄNGIJAID...</p>
+          <p id="loading-text" class="loading-label">
+            OOTAME TEISI MÄNGIJAID...
+          </p>
           <p id="loading-count" class="loading-count"></p>
         </div>
 
@@ -172,17 +211,25 @@
             <h1 class="screen-title">EDETABEL</h1>
           </div>
 
+          <div id="score-legend" class="score-legend"></div>
+
           <ul id="leaderboard-list" class="leaderboard"></ul>
 
           <div class="pairs-section">
             <h3 class="section-label">VALI VÄLJAKUTSE</h3>
             <div class="pair-grid">
-              <div class="pair-card sync-card glass-card" onclick="showChallenge('sync')">
+              <div
+                class="pair-card sync-card glass-card"
+                onclick="showChallenge('sync')"
+              >
                 <span class="pair-emoji">🔗</span>
                 <div class="pair-label">SARNANE PAAR</div>
                 <div id="sync-names" class="pair-names">...</div>
               </div>
-              <div class="pair-card bridge-card glass-card" onclick="showChallenge('bridge')">
+              <div
+                class="pair-card bridge-card glass-card"
+                onclick="showChallenge('bridge')"
+              >
                 <span class="pair-emoji">🌉</span>
                 <div class="pair-label">VASTANDPAAR</div>
                 <div id="bridge-names" class="pair-names">...</div>
@@ -190,7 +237,9 @@
             </div>
           </div>
 
-          <button class="btn-ghost btn-dim" onclick="location.reload()">🏠 PEAMENÜÜSSE</button>
+          <button class="btn-ghost btn-dim" onclick="location.reload()">
+            🏠 PEAMENÜÜSSE
+          </button>
         </div>
       </div>
 
@@ -204,7 +253,27 @@
           <div id="challenge-desc" class="challenge-body"></div>
         </div>
         <div id="timer" class="challenge-timer">01:30</div>
-        <button class="btn-ghost" onclick="backToLeaderboard()">← TAGASI</button>
+        <button class="btn-ghost" onclick="backToLeaderboard()">
+          ← TAGASI
+        </button>
+
+        <!-- TIME UP OVERLAY (shown when 90s timer ends) -->
+        <div id="timeup-overlay" class="timeup-overlay" aria-hidden="true">
+          <div class="timeup-panel glass-card">
+            <div class="timeup-badge">⏰</div>
+            <h2 id="timeup-title" class="timeup-title">AEG TÄIS!</h2>
+            <p id="timeup-sub" class="timeup-sub">
+              Tagasi tulemuste juurde.
+            </p>
+            <button
+              id="timeup-back"
+              class="btn-primary"
+              onclick="backToLeaderboard()"
+            >
+              ← TAGASI SKOORIDE JUURDE
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
