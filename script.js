@@ -91,7 +91,112 @@ function showScreen(id) {
 
 function selectLanguage(l) {
   state.lang = l;
+  applyLanguageToUI();
   showScreen("role-screen");
+}
+
+function applyLanguageToUI() {
+  const isET = state.lang === "et";
+
+  // Document language
+  document.documentElement.lang = isET ? "et" : "en";
+
+  // Player name
+  const nameInput = document.getElementById("player-name");
+  if (nameInput) nameInput.placeholder = isET ? "SINU NIMI" : "YOUR NAME";
+
+  // Role screen buttons
+  const hostBtn = document.querySelector(".btn-host");
+  if (hostBtn)
+    hostBtn.innerHTML = `<span class="btn-icon">🎮</span> ${isET ? "HOSTI MÄNGU" : "HOST GAME"}`;
+
+  const joinBtn = document.querySelector(".btn-join");
+  if (joinBtn)
+    joinBtn.innerHTML = `<span class="btn-icon">🔗</span> ${isET ? "LIITU MÄNGUGA" : "JOIN GAME"}`;
+
+  // Rules buttons + modal title
+  const rulesOpenBtn = document.querySelector(
+    'button.btn-ghost[onclick="toggleRules(true)"]',
+  );
+  if (rulesOpenBtn)
+    rulesOpenBtn.textContent = isET ? "📖 MÄNGUREEGLID" : "📖 RULES";
+
+  const rulesTitle = document.querySelector("#rules-modal h2");
+  if (rulesTitle)
+    rulesTitle.textContent = isET ? "KUIDAS MÄNGIDA?" : "HOW TO PLAY?";
+
+  const rulesCloseBtn = document.querySelector(
+    "#rules-modal button.btn-primary",
+  );
+  if (rulesCloseBtn) rulesCloseBtn.textContent = isET ? "SULGE" : "CLOSE";
+
+  // Join screen
+  const joinCode = document.getElementById("join-room-code");
+  if (joinCode) joinCode.placeholder = isET ? "RUUMI KOOD" : "ROOM CODE";
+
+  const joinEnterBtn = document.querySelector("#join-input-screen .btn-join");
+  if (joinEnterBtn) joinEnterBtn.textContent = isET ? "SISENE →" : "ENTER →";
+
+  // Lobby labels
+  const lobbyTitle = document.querySelector("#host-lobby-screen .screen-title");
+  if (lobbyTitle) lobbyTitle.textContent = isET ? "RUUM" : "ROOM";
+
+  const lobbyStatus = document.getElementById("lobby-status");
+  if (lobbyStatus)
+    lobbyStatus.textContent = isET
+      ? "Ootame mängijaid..."
+      : "Waiting for players...";
+
+  const startBtn = document.getElementById("start-game-btn");
+  if (startBtn) startBtn.textContent = isET ? "▶ ALUSTA MÄNGU" : "▶ START GAME";
+
+  const waitMsg = document.getElementById("wait-message");
+  if (waitMsg)
+    waitMsg.textContent = isET
+      ? "⏳ Oota, kuni HOST alustab..."
+      : "⏳ Wait for the HOST to start...";
+
+  const leaveBtn = document.querySelector(
+    "#host-lobby-screen button.btn-ghost.btn-dim",
+  );
+  if (leaveBtn) leaveBtn.textContent = isET ? "🚪 LAHKU" : "🚪 LEAVE";
+
+  // Results labels
+  const leaderboardTitle = document.querySelector(
+    "#results-content .screen-title",
+  );
+  if (leaderboardTitle)
+    leaderboardTitle.textContent = isET ? "EDETABEL" : "LEADERBOARD";
+
+  const chooseChallengeLabel = document.querySelector(
+    "#results-content .section-label",
+  );
+  if (chooseChallengeLabel)
+    chooseChallengeLabel.textContent = isET
+      ? "VALI VÄLJAKUTSE"
+      : "CHOOSE A CHALLENGE";
+
+  // Pair labels
+  const syncLabel = document.querySelector(".sync-card .pair-label");
+  if (syncLabel) syncLabel.textContent = isET ? "SARNANE PAAR" : "SYNC PAIR";
+
+  const bridgeLabel = document.querySelector(".bridge-card .pair-label");
+  if (bridgeLabel)
+    bridgeLabel.textContent = isET ? "VASTANDPAAR" : "BRIDGE PAIR";
+
+  // Back to menu button
+  const homeBtn = document.querySelector(
+    "#results-content button.btn-ghost.btn-dim",
+  );
+  if (homeBtn) homeBtn.textContent = isET ? "🏠 PEAMENÜÜSSE" : "🏠 MAIN MENU";
+
+  // Challenge screen
+  const challengeTitle = document.getElementById("challenge-title");
+  if (challengeTitle)
+    challengeTitle.textContent = isET ? "ÜLESANNE" : "CHALLENGE";
+
+  const backBtn = document.querySelector("#challenge-screen button.btn-ghost");
+  if (backBtn) backBtn.textContent = isET ? "← TAGASI" : "← BACK";
 }
 
 function toggleRules(show) {
