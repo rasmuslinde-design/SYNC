@@ -796,14 +796,6 @@ function renderEndChallengeCards(syncPair, bridgePair) {
 }
 
 function showGroupChallenge(groupIndex) {
-  if (!state.isHost) {
-    const msg =
-      state.lang === "et"
-        ? "Ainult HOST saab väljakutseid avada."
-        : "Only the HOST can open challenges.";
-    alert(msg);
-    return;
-  }
   const g = state.endGroups?.[groupIndex];
   if (!g) return;
 
@@ -820,14 +812,6 @@ function showGroupChallenge(groupIndex) {
 
 // Legacy handler (older UI / fallback)
 function showChallenge(type) {
-  if (!state.isHost) {
-    const msg =
-      state.lang === "et"
-        ? "Ainult HOST saab väljakutseid avada."
-        : "Only the HOST can open challenges.";
-    alert(msg);
-    return;
-  }
   hideTimeUpOverlay();
   showScreen("challenge-screen");
   const prefix = state.lang === "et" ? "TEIE ÜLESANNE: " : "YOUR TASK: ";

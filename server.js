@@ -127,13 +127,6 @@ io.on("connection", (socket) => {
     if (room.started) return socket.emit("join-error", "Mäng on juba alanud!");
     if (room.players.length >= 12)
       return socket.emit("join-error", "Ruum on täis!");
-    if (lang && room.lang && lang !== room.lang)
-      return socket.emit(
-        "join-error",
-        room.lang === "et"
-          ? "See ruum on EESTI keeles. Vali Eesti keel ja proovi uuesti."
-          : "This room is in ENGLISH. Select English and try again.",
-      );
     if (room.players.find((p) => p.name === name))
       return socket.emit("join-error", "See nimi on juba võetud!");
 
