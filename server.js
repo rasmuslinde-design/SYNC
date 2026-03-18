@@ -28,6 +28,57 @@ function pickRandom(arr, n) {
   return shuffled.slice(0, Math.min(n, arr.length));
 }
 
+// Grouping strategy for end screen:
+// - Pair extremes inwards: #1&#N, #2&#(N-1), ...
+// - If odd N, the middle player is added as a 3rd member to the extremes group (#1&#N),
+//   so nobody is left out.
+// - Each group is classified as:
+//    - "bridge" if score distance is large (more different)
+//    - "sync" if score distance is small (more similar)
+//   This lets us render different-looking challenge cards.
+function buildEndGroups(sortedPlayers) {
+  const list = [...sortedPlayers];
+  const n = list.length;
+  if (n < 2) return [];
+
+  const groups = [];
+  for (let left = 0, right = n - 1; left < right; left++, right--) {
+    const a = list[left];
+    const b = list[right];
+    groups.push({
+      members: [a.name, b.name],
+      scores: [a.score, b.score],
+    });
+  }
+
+  // Odd count => add the middle player into the extremes group as a trio
+  if (n % 2 === 1) {
+    const mid = list[Math.floor(n / 2)];
+    if (groups[0]) {
+      groups[0].members.push(mid.name);
+      groups[0].scores.push(mid.score);
+    }
+  }
+
+  // Classify groups: bridge vs sync by score spread.
+  // Threshold: 0..20 spread possible. Using 8 keeps mid-ish pairs like (5,7) as sync,
+  // and extreme pairs as bridge.
+  const THRESHOLD = 8;
+  for (const g of groups) {
+    const min = Math.min(...g.scores);
+    const max = Math.max(...g.scores);
+    const spread = Math.abs(max - min);
+    g.spread = spread;
+    g.kind = spread >= THRESHOLD ? "bridge" : "sync";
+  }
+
+  return groups;
+}
+
+module.exports = {
+  buildEndGroups,
+};
+
 io.on("connection", (socket) => {
   console.log("Ühendus:", socket.id);
 
@@ -59,6 +110,7 @@ io.on("connection", (socket) => {
 
     socket.emit("room-created", {
       code,
+      lang,
       questions: selectedQuestions,
       challenges: rooms[code].challenges,
     });
@@ -69,12 +121,19 @@ io.on("connection", (socket) => {
   });
 
   // Mängija liitub ruumiga
-  socket.on("join-room", ({ code, name }) => {
+  socket.on("join-room", ({ code, name, lang }) => {
     const room = rooms[code];
     if (!room) return socket.emit("join-error", "Ruumi ei leitud!");
     if (room.started) return socket.emit("join-error", "Mäng on juba alanud!");
-    if (room.players.length >= 8)
+    if (room.players.length >= 12)
       return socket.emit("join-error", "Ruum on täis!");
+    if (lang && room.lang && lang !== room.lang)
+      return socket.emit(
+        "join-error",
+        room.lang === "et"
+          ? "See ruum on EESTI keeles. Vali Eesti keel ja proovi uuesti."
+          : "This room is in ENGLISH. Select English and try again.",
+      );
     if (room.players.find((p) => p.name === name))
       return socket.emit("join-error", "See nimi on juba võetud!");
 
@@ -85,6 +144,7 @@ io.on("connection", (socket) => {
 
     socket.emit("room-joined", {
       code,
+      lang: room.lang,
       questions: room.questions,
       challenges: room.challenges,
     });
@@ -95,12 +155,42 @@ io.on("connection", (socket) => {
   });
 
   // Host alustab mängu
-  socket.on("start-game", () => {
+  socket.on("start-game", ({ hostPlays } = {}) => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
+
+    // Optional: host can act as game master (spectator)
+    if (hostPlays === false) {
+      room.players = room.players.filter((p) => p.id !== room.host);
+    }
+
     room.started = true;
     io.to(code).emit("game-started");
+
+    // If host is game master, they still need player names for the progress UI.
+    if (hostPlays === false) {
+      io.to(room.host).emit("gm-players", {
+        players: room.players.map((p) => p.name),
+      });
+    }
+  });
+
+  // Host/Game Master can force everyone back to lobby (e.g., someone dropped)
+  socket.on("return-to-lobby", () => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.host !== socket.id) return;
+
+    room.started = false;
+    // Reset all scores so the quiz can be started again
+    room.players = room.players.map((p) => ({ ...p, score: null }));
+
+    io.to(code).emit("return-to-lobby");
+    io.to(code).emit(
+      "lobby-update",
+      room.players.map((p) => p.name),
+    );
   });
 
   // Mängija saadab oma skoori
@@ -109,16 +199,26 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return;
 
-    const player = room.players.find((p) => p.id === socket.id);
-    if (player) player.score = score;
+    // Game master is allowed to send score:null (ignored)
+    if (score !== null) {
+      const player = room.players.find((p) => p.id === socket.id);
+      if (player) player.score = score;
+    }
 
     const finished = room.players.filter((p) => p.score !== null);
     const total = room.players.length;
+
+    const answeredNames = finished.map((p) => p.name);
+    const pendingNames = room.players
+      .filter((p) => p.score === null)
+      .map((p) => p.name);
 
     // Teavita kõiki progressist
     io.to(code).emit("score-progress", {
       finished: finished.length,
       total,
+      answeredNames,
+      pendingNames,
     });
 
     // Kõik on vastanud
@@ -126,19 +226,28 @@ io.on("connection", (socket) => {
       const sorted = [...finished].sort((a, b) => b.score - a.score);
       const results = sorted.map((p) => ({ name: p.name, score: p.score }));
 
-      let syncPair = null;
-      let bridgePair = null;
+      const groups = buildEndGroups(sorted);
 
-      if (sorted.length >= 2) {
-        syncPair = { a: sorted[0].name, b: sorted[1].name };
-        bridgePair = {
-          a: sorted[0].name,
-          b: sorted[sorted.length - 1].name,
-        };
-      }
+      // Legacy compatibility: keep two fields for older clients.
+      const bridgeGroup = groups.find((g) => g.kind === "bridge") || groups[0];
+      const syncGroup = groups.find((g) => g.kind === "sync") || groups[1];
+      const bridgePair = bridgeGroup
+        ? { a: bridgeGroup.members[0], b: bridgeGroup.members[1] }
+        : null;
+      const syncPair = syncGroup
+        ? { a: syncGroup.members[0], b: syncGroup.members[1] }
+        : null;
 
       io.to(code).emit("all-finished", {
         leaderboard: results,
+        // New UI can render all of these.
+        groups: groups.map((g) => ({
+          kind: g.kind,
+          members: g.members,
+          spread: g.spread,
+        })),
+
+        // Old UI uses these two.
         syncPair,
         bridgePair,
         challenges: room.challenges,
@@ -614,6 +723,8 @@ const allChallenges = {
 };
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`SYNC server käivitatud: http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`SYNC server käivitatud: http://localhost:${PORT}`);
+  });
+}

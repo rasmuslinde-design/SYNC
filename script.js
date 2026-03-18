@@ -8,33 +8,73 @@ let state = {
   name: "",
   room: "",
   isHost: false,
+  hostPlays: true,
   score: 0,
   qIdx: 0,
   questionTimer: null,
   questionTimeLeft: 20,
+  endGroups: [],
+  gmIdx: 0,
+  gmPlayers: [],
+  gmAnswered: [],
+  gmPending: [],
 };
+
+function isGameMaster() {
+  return state.isHost && state.hostPlays === false;
+}
 
 function connectSocket() {
   if (socket && socket.connected) return;
   socket = io();
 
-  socket.on("room-created", ({ code, questions, challenges }) => {
+  socket.on("room-created", ({ code, lang, questions, challenges }) => {
     state.room = code;
+    if (lang && (lang === "et" || lang === "en")) {
+      state.lang = lang;
+      applyLanguageToUI();
+    }
     gameQuestions = questions;
     gameChallenges = challenges;
     document.getElementById("display-room-code").innerText = code;
     document.getElementById("start-game-btn").style.display = "flex";
     document.getElementById("wait-message").style.display = "none";
+
+    // Host-only: show host mode toggle
+    const hostBox = document.getElementById("host-mode-box");
+    if (hostBox) hostBox.style.display = "block";
+    const toggle = document.getElementById("host-plays-toggle");
+    if (toggle) {
+      toggle.checked = !!state.hostPlays;
+      toggle.onchange = () => {
+        state.hostPlays = !!toggle.checked;
+
+        // If switching to "host plays", make sure any GM overlay from a previous run is closed.
+        if (state.hostPlays) {
+          stopGameMasterView();
+        }
+      };
+    }
+
     showScreen("host-lobby-screen");
   });
 
-  socket.on("room-joined", ({ code, questions, challenges }) => {
+  socket.on("room-joined", ({ code, lang, questions, challenges }) => {
     state.room = code;
+    if (lang && (lang === "et" || lang === "en")) {
+      state.lang = lang;
+      applyLanguageToUI();
+    }
     gameQuestions = questions;
     gameChallenges = challenges;
     document.getElementById("display-room-code").innerText = code;
     document.getElementById("start-game-btn").style.display = "none";
     document.getElementById("wait-message").style.display = "block";
+
+    // Joiners never see host option
+    const hostBox = document.getElementById("host-mode-box");
+    if (hostBox) hostBox.style.display = "none";
+
     showScreen("host-lobby-screen");
   });
 
@@ -48,29 +88,86 @@ function connectSocket() {
       .join("");
   });
 
+  socket.on("return-to-lobby", () => {
+    // Reset client-side game state
+    if (state.questionTimer) clearInterval(state.questionTimer);
+    state.questionTimer = null;
+    state.questionTimeLeft = 20;
+    state.qIdx = 0;
+    state.gmIdx = 0;
+
+    // Default back to "host plays" so toggle state is predictable after a reset.
+    state.hostPlays = true;
+    const toggle = document.getElementById("host-plays-toggle");
+    if (toggle) toggle.checked = true;
+
+    // Ensure GM overlay isn't lingering
+    stopGameMasterView();
+
+    // Ensure GM overlay isn't stuck on
+    if (isGameMaster()) stopGameMasterView();
+
+    // Restore UI pieces just in case
+    const answers = document.querySelector(".answer-cards");
+    if (answers) {
+      answers.style.pointerEvents = "auto";
+      answers.style.display = "flex";
+    }
+    const timerContainer = document.getElementById("timer-circle-container");
+    if (timerContainer) timerContainer.style.visibility = "visible";
+
+    // Back to lobby
+    showScreen("host-lobby-screen");
+  });
+
   socket.on("game-started", () => {
     startQuestions();
   });
 
-  socket.on("score-progress", ({ finished, total }) => {
-    const loadingText = document.getElementById("loading-text");
-    const loadingCount = document.getElementById("loading-count");
-
-    if (state.lang === "et") {
-      loadingText.innerText = "OOTAME TEISI MÄNGIJAID...";
-      loadingCount.innerText = `${finished} / ${total} VASTANUD`;
-    } else {
-      loadingText.innerText = "WAITING FOR OTHER PLAYERS...";
-      loadingCount.innerText = `${finished} / ${total} ANSWERED`;
-    }
+  socket.on("gm-players", ({ players }) => {
+    if (!isGameMaster()) return;
+    state.gmPlayers = Array.isArray(players) ? players : [];
+    // Until we get score-progress, everyone is pending.
+    state.gmAnswered = [];
+    state.gmPending = [...state.gmPlayers];
+    renderGameMasterPlayers();
   });
 
   socket.on(
+    "score-progress",
+    ({ finished, total, answeredNames, pendingNames }) => {
+      const loadingText = document.getElementById("loading-text");
+      const loadingCount = document.getElementById("loading-count");
+
+      if (state.lang === "et") {
+        loadingText.innerText = "OOTAME TEISI MÄNGIJAID...";
+        loadingCount.innerText = `${finished} / ${total} VASTANUD`;
+      } else {
+        loadingText.innerText = "WAITING FOR OTHER PLAYERS...";
+        loadingCount.innerText = `${finished} / ${total} ANSWERED`;
+      }
+
+      updateGameMasterProgress(finished, total);
+
+      if (isGameMaster()) {
+        if (Array.isArray(answeredNames)) state.gmAnswered = answeredNames;
+        if (Array.isArray(pendingNames)) state.gmPending = pendingNames;
+        renderGameMasterPlayers();
+      }
+    },
+  );
+
+  socket.on(
     "all-finished",
-    ({ leaderboard, syncPair, bridgePair, challenges }) => {
+    ({ leaderboard, syncPair, bridgePair, groups, challenges }) => {
       gameChallenges = challenges;
+      state.endGroups = Array.isArray(groups) ? groups : [];
+
+      if (isGameMaster()) stopGameMasterView();
+
       document.getElementById("loading-spinner").style.display = "none";
       document.getElementById("results-content").style.display = "block";
+      showScreen("result-screen");
       showLeaderboardData(leaderboard, syncPair, bridgePair);
     },
   );
@@ -130,6 +227,17 @@ function applyLanguageToUI() {
   );
   if (rulesCloseBtn) rulesCloseBtn.textContent = isET ? "SULGE" : "CLOSE";
 
+  // Generic back buttons on menu screens
+  const backToLangBtn = document.querySelector(
+    "#role-screen button.btn-ghost.btn-dim[onclick=\"showScreen('language-screen')\"]",
+  );
+  if (backToLangBtn) backToLangBtn.textContent = isET ? "← TAGASI" : "← BACK";
+
+  const backToRoleBtn = document.querySelector(
+    "#join-input-screen button.btn-ghost.btn-dim[onclick=\"showScreen('role-screen')\"]",
+  );
+  if (backToRoleBtn) backToRoleBtn.textContent = isET ? "← TAGASI" : "← BACK";
+
   // Join screen
   const joinCode = document.getElementById("join-room-code");
   if (joinCode) joinCode.placeholder = isET ? "RUUMI KOOD" : "ROOM CODE";
@@ -160,6 +268,17 @@ function applyLanguageToUI() {
     "#host-lobby-screen button.btn-ghost.btn-dim",
   );
   if (leaveBtn) leaveBtn.textContent = isET ? "🚪 LAHKU" : "🚪 LEAVE";
+
+  // Host mode toggle (only visible for host)
+  const hostModeTitle = document.getElementById("host-mode-title");
+  if (hostModeTitle)
+    hostModeTitle.textContent = isET ? "HOSTI REŽIIM" : "HOST MODE";
+
+  const hostPlaysLabel = document.getElementById("host-plays-label");
+  if (hostPlaysLabel)
+    hostPlaysLabel.textContent = isET
+      ? "HOST mängib kaasa"
+      : "Host plays along";
 
   // Results labels
   const leaderboardTitle = document.querySelector(
@@ -195,16 +314,20 @@ function applyLanguageToUI() {
   if (challengeTitle)
     challengeTitle.textContent = isET ? "ÜLESANNE" : "CHALLENGE";
 
-  const backBtn = document.querySelector("#challenge-screen button.btn-ghost");
+  const backBtn = document.getElementById("challenge-back");
   if (backBtn) backBtn.textContent = isET ? "← TAGASI" : "← BACK";
+
+  // GM back button
+  const gmBack = document.getElementById("gm-back-room");
+  if (gmBack) gmBack.textContent = isET ? "← TAGASI RUUMI" : "← BACK TO ROOM";
 }
 
 function toggleRules(show) {
   const modal = document.getElementById("rules-modal");
   if (show) {
     const rulesText = {
-      et: "1. Host loob ruumi ja mängijad liituvad koodiga (max 8 in).\n2. Kõik vastavad 10-le isiksuse küsimusele (20 sek küsimus).\n3. Süsteem arvutab sinu skaala (-10 kuni +10).\n4. Edetabelis näed kahte paari: SARNASED ja VASTANDID.\n5. Valitud paar peab täitma 90-sekundilise väljakutse.",
-      en: "1. Host creates a room, players join with a code (max 8).\n2. Everyone answers 10 personality questions (20 sec each).\n3. The system calculates your scale (-10 to +10).\n4. The leaderboard shows two pairs: SYNC and BRIDGE.\n5. The selected pair must complete a 90-second challenge.",
+      et: "1. Host loob ruumi ja mängijad liituvad koodiga (max 12).\n2. Host saab valida, kas mängib kaasa või on GAME MASTER.\n3. Kõik mängijad vastavad 10-le isiksuse küsimusele (20 sek küsimus).\n4. Süsteem arvutab sinu skaala (-10 kuni +10).\n5. Lõpus tekivad mitmed paarid/kolmikud ning HOST avab väljakutsed.\n6. Valitud grupp täidab 90-sekundilise väljakutse.",
+      en: "1. Host creates a room, players join with a code (max 12).\n2. The host can choose to play or be a GAME MASTER.\n3. All players answer 10 personality questions (20 sec each).\n4. The system calculates your scale (-10 to +10).\n5. The end screen creates multiple pairs/trios, and the HOST opens challenges.\n6. The selected group completes a 90-second challenge.",
     };
     document.getElementById("rules-text").innerText = rulesText[state.lang];
     modal.style.display = "flex";
@@ -223,21 +346,27 @@ function setupHost() {
 }
 
 function setupJoin() {
-  state.name = document.getElementById("player-name").value.trim() || "Mängija";
+  state.name =
+    document.getElementById("player-name").value.trim() ||
+    (state.lang === "et" ? "Mängija" : "Player");
   connectSocket();
   showScreen("join-input-screen");
 }
 
 function joinRoom() {
   const code = document.getElementById("join-room-code").value.trim();
-  if (!code) return alert("Sisesta kood!");
+  if (!code)
+    return alert(state.lang === "et" ? "Sisesta kood!" : "Enter a code!");
   state.room = code;
   state.isHost = false;
-  socket.emit("join-room", { code, name: state.name });
+  socket.emit("join-room", { code, name: state.name, lang: state.lang });
 }
 
 function broadcastStart() {
-  socket.emit("start-game");
+  // Always read from the toggle right before starting (avoids stale state)
+  const toggle = document.getElementById("host-plays-toggle");
+  if (toggle) state.hostPlays = !!toggle.checked;
+  socket.emit("start-game", { hostPlays: !!state.hostPlays });
 }
 
 // ========== KÜSIMUSED ==========
@@ -245,8 +374,72 @@ function broadcastStart() {
 function startQuestions() {
   state.qIdx = 0;
   state.score = 0;
+  // If host is game master, they don't play.
+  if (state.isHost && !state.hostPlays) {
+    startGameMasterView();
+    return;
+  }
   showScreen("question-screen");
   updateQ();
+}
+
+function startGameMasterView() {
+  // Game master is excluded from scoring; just observe.
+  socket.emit("submit-score", { score: null });
+
+  showScreen("question-screen");
+  state.gmIdx = 0;
+
+  const gm = document.getElementById("gm-overlay");
+  if (gm) gm.style.display = "flex";
+
+  // Disable answering UI
+  const answers = document.querySelector(".answer-cards");
+  if (answers) {
+    answers.style.pointerEvents = "none";
+    answers.style.display = "none";
+  }
+
+  // Hide question timer for game master
+  const timerContainer = document.getElementById("timer-circle-container");
+  if (timerContainer) timerContainer.style.visibility = "hidden";
+
+  // Localize GM players panel labels
+  const isET = state.lang === "et";
+  const t = document.getElementById("gm-players-title");
+  const p1 = document.getElementById("gm-pending-title");
+  const p2 = document.getElementById("gm-answered-title");
+  if (t) t.textContent = isET ? "MÄNGIJAD" : "PLAYERS";
+  if (p1) p1.textContent = isET ? "VASTAMAS" : "ANSWERING";
+  if (p2) p2.textContent = isET ? "VASTANUD" : "ANSWERED";
+
+  // Clear lists until first server update (or gm-players event)
+  if (!Array.isArray(state.gmPlayers) || state.gmPlayers.length === 0) {
+    state.gmAnswered = [];
+    state.gmPending = [];
+  }
+  renderGameMasterPlayers();
+
+  renderGameMasterCard();
+}
+
+function stopGameMasterView() {
+  const gm = document.getElementById("gm-overlay");
+  if (gm) gm.style.display = "none";
+
+  const answers = document.querySelector(".answer-cards");
+  if (answers) {
+    answers.style.pointerEvents = "auto";
+    answers.style.display = "flex";
+  }
+
+  const timerContainer = document.getElementById("timer-circle-container");
+  if (timerContainer) timerContainer.style.visibility = "visible";
+
+  // Reset GM state
+  state.gmPlayers = [];
+  state.gmAnswered = [];
+  state.gmPending = [];
 }
 
 function updateQ() {
@@ -354,6 +547,121 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
+function updateGameMasterProgress(finished, total) {
+  if (!isGameMaster()) return;
+  const el = document.getElementById("gm-progress");
+  if (!el) return;
+  el.textContent =
+    state.lang === "et"
+      ? `${finished} / ${total} vastanud`
+      : `${finished} / ${total} answered`;
+
+  // In GM panel we label it as "VASTAMAS" / "ANSWERING" but keep the same numbers
+  // (finished so far out of total), as requested.
+  const meta = document.getElementById("gm-players-meta");
+  if (meta)
+    meta.textContent =
+      state.lang === "et"
+        ? `VASTAMAS ${finished} / ${total}`
+        : `ANSWERING ${finished} / ${total}`;
+}
+
+function renderGameMasterPlayers() {
+  if (!isGameMaster()) return;
+  const pendingEl = document.getElementById("gm-pending-list");
+  const answeredEl = document.getElementById("gm-answered-list");
+  if (!pendingEl || !answeredEl) return;
+
+  const pending = Array.isArray(state.gmPending) ? state.gmPending : [];
+  const answered = Array.isArray(state.gmAnswered) ? state.gmAnswered : [];
+
+  const renderPills = (names, status) => {
+    if (!names.length) {
+      return `<div class="gm-pill" style="opacity:0.55; justify-content:center">${
+        state.lang === "et" ? "—" : "—"
+      }</div>`;
+    }
+    return names
+      .map(
+        (n) =>
+          `<div class="gm-pill"><span>${escapeHtml(n)}</span><small>${status}</small></div>`,
+      )
+      .join("");
+  };
+
+  pendingEl.innerHTML = renderPills(
+    pending,
+    state.lang === "et" ? "..." : "...",
+  );
+  answeredEl.innerHTML = renderPills(
+    answered,
+    state.lang === "et" ? "OK" : "OK",
+  );
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderGameMasterCard() {
+  if (!isGameMaster()) return;
+  const qCount = gameQuestions.length || 0;
+  if (!qCount) return;
+
+  const idx = clamp(state.gmIdx, 0, qCount - 1);
+  state.gmIdx = idx;
+  const qData = gameQuestions[idx];
+
+  const qnum = document.getElementById("gm-qnum");
+  const icon = document.getElementById("gm-icon");
+  const q = document.getElementById("gm-q");
+  const badge = document.getElementById("gm-badge");
+
+  if (badge)
+    badge.textContent =
+      state.lang === "et" ? "🎛️ GAME MASTER" : "🎛️ GAME MASTER";
+
+  if (qnum)
+    qnum.textContent =
+      state.lang === "et"
+        ? `KÜSIMUS ${idx + 1} / ${qCount}`
+        : `QUESTION ${idx + 1} / ${qCount}`;
+  if (icon) icon.textContent = qData.icon || "🧠";
+  if (q) q.textContent = qData.q;
+
+  // Enable/disable nav buttons
+  const prevBtn = document.getElementById("gm-prev");
+  const nextBtn = document.getElementById("gm-next");
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx >= qCount - 1;
+}
+
+// Called by buttons in index.html
+function gmNext() {
+  if (!isGameMaster()) return;
+  state.gmIdx = Math.min((gameQuestions.length || 1) - 1, state.gmIdx + 1);
+  renderGameMasterCard();
+}
+
+function gmPrev() {
+  if (!isGameMaster()) return;
+  state.gmIdx = Math.max(0, state.gmIdx - 1);
+  renderGameMasterCard();
+}
+
+function gmBackToRoom() {
+  if (!isGameMaster()) return;
+  // Ask server to return everyone to the lobby and allow restarting.
+  // Also do it locally right away so it works even in solo testing.
+  if (socket && socket.connected) socket.emit("return-to-lobby");
+  showScreen("host-lobby-screen");
+}
+
 // Returns an HSL color string.
 // -10 => red, 0 => neutral, +10 => green
 function scoreToColor(score) {
@@ -379,8 +687,8 @@ function showLeaderboardData(leaderboard, syncPair, bridgePair) {
     const rightColor = scoreToColor(10);
     legend.innerHTML =
       state.lang === "et"
-        ? `<span class="left" style="color:${leftColor}">-10 väga introvertne</span><span class="mid">SKAALA</span><span class="right" style="color:${rightColor}">+10 väga ekstravertne</span>`
-        : `<span class="left" style="color:${leftColor}">-10 very introverted</span><span class="mid">SCALE</span><span class="right" style="color:${rightColor}">+10 very extroverted</span>`;
+        ? `<span class="left" style="color:${leftColor}"><button class="legend-mini" onclick="showAnimalLegend('cat')">🐱</button> -10 KASS</span><span class="mid">SKAALA</span><span class="right" style="color:${rightColor}">+10 KOER <button class="legend-mini" onclick="showAnimalLegend('dog')">🐶</button></span>`
+        : `<span class="left" style="color:${leftColor}"><button class="legend-mini" onclick="showAnimalLegend('cat')">🐱</button> -10 CAT</span><span class="mid">SCALE</span><span class="right" style="color:${rightColor}">+10 DOG <button class="legend-mini" onclick="showAnimalLegend('dog')">🐶</button></span>`;
   }
 
   document.getElementById("leaderboard-list").innerHTML = leaderboard
@@ -393,22 +701,133 @@ function showLeaderboardData(leaderboard, syncPair, bridgePair) {
     )
     .join("");
 
+  renderEndChallengeCards(syncPair, bridgePair);
+}
+
+function showAnimalLegend(which) {
+  const isET = state.lang === "et";
+  const copy = {
+    cat: {
+      etTitle: "🐱 KASS (introvertne pool)",
+      enTitle: "🐱 CAT (introverted side)",
+      et: "KASS tähendab: laed energiat vaikuses, eelistad väiksemaid seltskondi, mõtled enne kui räägid ja naudid oma ruumi.\n\nSee ei tähenda 'häbelik' — lihtsalt rahulik ja selektiivne sotsiaalsuses.",
+      en: "CAT means: you recharge in quiet, prefer smaller groups, think before you speak, and enjoy your own space.\n\nIt doesn't mean 'shy' — just calm and selective socially.",
+    },
+    dog: {
+      etTitle: "🐶 KOER (ekstravertne pool)",
+      enTitle: "🐶 DOG (extroverted side)",
+      et: "KOER tähendab: laed energiat inimestega, alustad kergemini vestlust, naudid aktiivset seltskonda ja tahad olla 'möllu sees'.\n\nSee ei tähenda 'valju' — lihtsalt sotsiaalselt energiline.",
+      en: "DOG means: you recharge with people, start conversations easily, enjoy active social settings, and like being in the middle of the action.\n\nIt doesn't mean 'loud' — just socially energetic.",
+    },
+  };
+
+  const c = copy[which];
+  if (!c) return;
+  const title = isET ? c.etTitle : c.enTitle;
+  const body = isET ? c.et : c.en;
+
+  showInfoModal(title, body);
+}
+
+function showInfoModal(title, body) {
+  const modal = document.getElementById("info-modal");
+  const t = document.getElementById("info-title");
+  const b = document.getElementById("info-body");
+  if (!modal || !t || !b) return;
+  t.textContent = title;
+  b.textContent = body;
+  modal.style.display = "flex";
+}
+
+function closeInfoModal() {
+  const modal = document.getElementById("info-modal");
+  if (!modal) return;
+  modal.style.display = "none";
+}
+
+function renderEndChallengeCards(syncPair, bridgePair) {
+  const grid = document.querySelector("#results-content .pair-grid");
+  if (!grid) return;
+
+  // If server sent groups, render all as cards.
+  if (Array.isArray(state.endGroups) && state.endGroups.length > 0) {
+    grid.innerHTML = state.endGroups
+      .map((g, idx) => {
+        const members = Array.isArray(g.members) ? g.members : [];
+        const isBridge = g.kind === "bridge";
+        const emoji = isBridge ? "🌉" : "🔗";
+        const cardClass = isBridge ? "bridge-card" : "sync-card";
+        const label =
+          state.lang === "et"
+            ? isBridge
+              ? "VASTANDPAAR"
+              : "SARNANE PAAR"
+            : isBridge
+              ? "BRIDGE"
+              : "SYNC";
+
+        const namesText = members.join(" & ");
+
+        return `
+          <div class="pair-card ${cardClass} glass-card" onclick="showGroupChallenge(${idx})">
+            <span class="pair-emoji">${emoji}</span>
+            <div class="pair-label">${label}</div>
+            <div class="pair-names">${namesText || "..."}</div>
+          </div>
+        `;
+      })
+      .join("");
+    return;
+  }
+
+  // Fallback: keep the original 2-card UI
+  const syncNames = document.getElementById("sync-names");
+  const bridgeNames = document.getElementById("bridge-names");
+  if (!syncNames || !bridgeNames) return;
+
   if (syncPair) {
-    document.getElementById("sync-names").innerText =
-      syncPair.a + " & " + syncPair.b;
-    document.getElementById("bridge-names").innerText =
-      bridgePair.a + " & " + bridgePair.b;
+    syncNames.innerText = syncPair.a + " & " + syncPair.b;
+    bridgeNames.innerText = bridgePair.a + " & " + bridgePair.b;
   } else {
     const waitText = state.lang === "et" ? "Ootame..." : "Waiting...";
-    document.getElementById("sync-names").innerText = waitText;
-    document.getElementById("bridge-names").innerText = waitText;
+    syncNames.innerText = waitText;
+    bridgeNames.innerText = waitText;
   }
 }
 
-// ========== ÜLESANDED ==========
+function showGroupChallenge(groupIndex) {
+  if (!state.isHost) {
+    const msg =
+      state.lang === "et"
+        ? "Ainult HOST saab väljakutseid avada."
+        : "Only the HOST can open challenges.";
+    alert(msg);
+    return;
+  }
+  const g = state.endGroups?.[groupIndex];
+  if (!g) return;
 
-let timerInterval;
+  // Pick challenge text by kind
+  const kind = g.kind === "bridge" ? "bridge" : "sync";
+  showScreen("challenge-screen");
+  hideTimeUpOverlay();
+
+  const prefix = state.lang === "et" ? "TEIE ÜLESANNE: " : "YOUR TASK: ";
+  document.getElementById("challenge-desc").innerText =
+    prefix + gameChallenges[kind];
+  startTimer(90);
+}
+
+// Legacy handler (older UI / fallback)
 function showChallenge(type) {
+  if (!state.isHost) {
+    const msg =
+      state.lang === "et"
+        ? "Ainult HOST saab väljakutseid avada."
+        : "Only the HOST can open challenges.";
+    alert(msg);
+    return;
+  }
   hideTimeUpOverlay();
   showScreen("challenge-screen");
   const prefix = state.lang === "et" ? "TEIE ÜLESANNE: " : "YOUR TASK: ";
@@ -416,6 +835,10 @@ function showChallenge(type) {
     prefix + gameChallenges[type];
   startTimer(90);
 }
+
+// ========== ÜLESANDED ==========
+
+let timerInterval;
 
 function startTimer(sec) {
   if (timerInterval) clearInterval(timerInterval);

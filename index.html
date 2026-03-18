@@ -89,6 +89,18 @@
         </div>
       </div>
 
+      <!-- INFO MODAL (used for legend explanations etc.) -->
+      <div id="info-modal" class="modal" style="display: none">
+        <div class="modal-content glass-card">
+          <div class="modal-header">
+            <span class="modal-icon">ℹ️</span>
+            <h2 id="info-title">Info</h2>
+          </div>
+          <div id="info-body" class="rules-body"></div>
+          <button class="btn-primary" onclick="closeInfoModal()">OK</button>
+        </div>
+      </div>
+
       <!-- JOIN INPUT SCREEN -->
       <div id="join-input-screen" class="screen">
         <div class="hero-section">
@@ -128,6 +140,20 @@
         </div>
         <div id="lobby-list" class="lobby-grid"></div>
         <div class="action-grid">
+          <div
+            id="host-mode-box"
+            class="host-mode-box glass-card"
+            style="display: none"
+          >
+            <div class="host-mode-title" id="host-mode-title">HOSTI REŽIIM</div>
+            <label class="toggle-row">
+              <input id="host-plays-toggle" type="checkbox" checked />
+              <span class="toggle-ui"></span>
+              <span class="toggle-label" id="host-plays-label"
+                >HOST mängib kaasa</span
+              >
+            </label>
+          </div>
           <button
             class="btn-start pulse-glow"
             id="start-game-btn"
@@ -188,6 +214,68 @@
             <div class="answer-accent-bar"></div>
             <p id="answer-right" class="answer-text"></p>
           </div>
+        </div>
+
+        <!-- GAME MASTER VIEW (host only, when hostPlays=false) -->
+        <div id="gm-overlay" class="gm-overlay" style="display: none">
+          <div class="gm-top">
+            <div class="gm-badge" id="gm-badge">🎛️ GAME MASTER</div>
+            <div class="gm-progress" id="gm-progress">0 / 0 answered</div>
+          </div>
+
+          <div class="gm-stage">
+            <button
+              class="gm-nav gm-nav-left"
+              id="gm-prev"
+              onclick="gmPrev()"
+              aria-label="Previous question"
+              title="Previous"
+            >
+              ←
+            </button>
+
+            <div class="gm-card glass-card">
+              <div class="gm-qnum" id="gm-qnum">QUESTION 1 / 10</div>
+              <div class="gm-icon" id="gm-icon">🧠</div>
+              <div class="gm-q" id="gm-q">...</div>
+            </div>
+
+            <button
+              class="gm-nav gm-nav-right"
+              id="gm-next"
+              onclick="gmNext()"
+              aria-label="Next question"
+              title="Next"
+            >
+              →
+            </button>
+          </div>
+
+          <div class="gm-players glass-card">
+            <div class="gm-players-title" id="gm-players-title">MÄNGIJAD</div>
+            <div class="gm-players-meta" id="gm-players-meta">
+              0 / 0 vastanud
+            </div>
+            <div class="gm-players-grid">
+              <div class="gm-players-col">
+                <div class="gm-col-title" id="gm-pending-title">VASTAMAS</div>
+                <div class="gm-list" id="gm-pending-list"></div>
+              </div>
+              <div class="gm-players-col">
+                <div class="gm-col-title" id="gm-answered-title">VASTANUD</div>
+                <div class="gm-list" id="gm-answered-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            id="gm-back-room"
+            class="btn-ghost btn-dim"
+            onclick="gmBackToRoom()"
+            style="align-self: center"
+          >
+            ← TAGASI RUUMI
+          </button>
         </div>
       </div>
 
@@ -253,7 +341,11 @@
           <div id="challenge-desc" class="challenge-body"></div>
         </div>
         <div id="timer" class="challenge-timer">01:30</div>
-        <button class="btn-ghost" onclick="backToLeaderboard()">
+        <button
+          id="challenge-back"
+          class="btn-ghost"
+          onclick="backToLeaderboard()"
+        >
           ← TAGASI
         </button>
 
