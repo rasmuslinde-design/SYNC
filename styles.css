@@ -46,6 +46,35 @@ body {
   position: relative;
 }
 
+.credits {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.credits-names {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  line-height: 1.15;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body.hide-credits .credits {
+  display: none;
+}
+
 /* ========== ANIMATED BACKGROUND ========== */
 #particles {
   position: fixed;

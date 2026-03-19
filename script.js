@@ -184,6 +184,15 @@ function showScreen(id) {
     .querySelectorAll(".screen")
     .forEach((s) => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
+
+  // Credits: show on menu/lobby-type screens, hide during gameplay/overlays.
+  const hideCreditsScreens = new Set([
+    "question-screen",
+    "waiting-screen",
+    "result-screen",
+    "challenge-screen",
+  ]);
+  document.body.classList.toggle("hide-credits", hideCreditsScreens.has(id));
 }
 
 function selectLanguage(l) {
